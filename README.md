@@ -34,7 +34,7 @@ Automated-YT-Shorts-AI/
 │   ├── temp/                # Intermediate processing files
 │   ├── final/               # 🏆 The Final Output Video lives here
 │   └── avatar/              # ⚠️ PUT YOUR AVATAR VIDEO HERE
-│       └── Professional_Girl_Animation_Video_Generation.mp4
+│       └── avatars.mp4
 │
 ├── modules/                 # Core Logic Modules
 │   ├── brain.py             # AI Scriptwriter (Gemini)
@@ -104,7 +104,7 @@ Required:
 
 Optional:
 
-- `GEMINI_MODEL` to override the default `gemini-2.0-flash` model
+- `GEMINI_MODEL` to override the default `gemini-3.5-flash` model
 
 ---
 
@@ -119,9 +119,43 @@ python main.py
 
 ```
 
-1. Enter a topic (e.g., _"The Mystery of the Pyramids"_).
-2. Wait for the AI to write the script, generate audio, download stock footage, and edit the video.
-3. The final video will be saved in `assets/final/final_short.mp4`.
+1. The AI picks a trending topic, writes the script, generates the audio, downloads stock footage, and edits the video.
+2. The final video is saved to `assets/final/` with a timestamped name (e.g. `short_20260812_1930.mp4`).
+
+### Automated / Unattended Runs
+
+`main.py` is fully non-interactive and returns a non-zero exit code when a run
+fails, so it drops straight into cron, systemd timers, or CI.
+
+```bash
+# Verify keys, ffmpeg and assets without generating anything
+python main.py --check
+
+# Pin the topic instead of letting the AI choose one
+python main.py --topic "Why the Sahara was once green"
+
+# Batch: produce 3 videos in one invocation
+python main.py --runs 3
+
+# Pick a voice and a fixed output name
+python main.py --voice en-GB-SoniaNeural --output daily_short.mp4
+```
+
+| Flag | Purpose |
+| --- | --- |
+| `--topic` | Skip the AI topic picker and use your own topic. |
+| `--runs N` | Generate N videos in one invocation (default `1`). |
+| `--voice` | Any `edge-tts` voice (default `en-US-AvaNeural`). |
+| `--output` | Output filename for a single run (default: timestamped). |
+| `--keep-cache` | Keep intermediate audio/video files instead of cleaning them. |
+| `--fail-fast` | Stop a batch at the first failed run. |
+| `--check` | Run preflight checks (ffmpeg, API keys, avatar) and exit. |
+
+Schedule a daily short with cron:
+
+```cron
+0 9 * * * cd /path/to/AutoShorts-AI && /usr/bin/python3 main.py >> run.log 2>&1
+```
 
 ---
 

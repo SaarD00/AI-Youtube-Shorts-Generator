@@ -5,11 +5,16 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+DEFAULT_MODEL = "gemini-3.5-flash"
+
 def _get_client():
     api_key = os.getenv("GEMINI_API_KEY")
     if not api_key:
         raise RuntimeError("GEMINI_API_KEY is not set. Create a .env file or set the environment variable before running.")
     return genai.Client(api_key=api_key)
+
+def _get_model():
+    return os.getenv("GEMINI_MODEL", DEFAULT_MODEL)
 
 class ContentBrain:
     def get_trending_topic(self):
@@ -19,7 +24,7 @@ class ContentBrain:
         """
         prompts = "Give me 1 specific, viral, and engaging topic for a Short Documentary. It should be a 'Engaging Did you know' fact or a 'Fun/intriguing Engaging News'. return ONLY the topic name."
         client = _get_client()
-        response = client.models.generate_content(model=os.getenv('GEMINI_MODEL', 'gemini-2.0-flash'), contents=prompts)
+        response = client.models.generate_content(model=_get_model(), contents=prompts)
         topic = response.text.strip()
         print(f"🎯 Selected Topic: {topic}")
         return topic
@@ -106,18 +111,52 @@ class ContentBrain:
     
 
         client = _get_client()
-        response = client.models.generate_content(model=os.getenv('GEMINI_MODEL', 'gemini-2.0-flash'), contents=prompt)
-        
-        # Clean the response to ensure it's valid JSON (sometimes AI adds markdown)
-        clean_text = response.text.replace('```json', '').replace('```', '').strip()
-        
-        try:
-            script_data = json.loads(clean_text)
-            return script_data
-        except json.JSONDecodeError:
-            print("❌ Error parsing JSON. Raw output:")
-            print(clean_text)
+
+        # Unattended runs cannot recover from a single malformed reply, so retry.
+        for attempt in range(3):
+            response = client.models.generate_content(model=_get_model(), contents=prompt)
+
+            # Clean the response to ensure it's valid JSON (sometimes AI adds markdown)
+            clean_text = response.text.replace('```json', '').replace('```', '').strip()
+
+            try:
+                script_data = json.loads(clean_text)
+            except json.JSONDecodeError:
+                print(f"   ⚠️ Invalid JSON (attempt {attempt+1}/3). Raw output:")
+                print(clean_text[:500])
+                continue
+
+            script_data = self._sanitize(script_data)
+            if script_data:
+                return script_data
+            print(f"   ⚠️ Script had no usable scenes (attempt {attempt+1}/3).")
+
+        print("❌ Script generation failed after 3 attempts.")
+        return None
+
+    @staticmethod
+    def _sanitize(script_data):
+        """
+        Drops malformed scenes and renumbers ids so downstream modules can rely
+        on 'id' and 'text' always being present.
+        """
+        if not isinstance(script_data, list):
+            print(f"   ⚠️ Expected a list of scenes, got {type(script_data).__name__}.")
             return None
+
+        scenes = []
+        for raw in script_data:
+            if not isinstance(raw, dict):
+                continue
+            text = str(raw.get('text', '')).strip()
+            if not text:
+                continue
+            scene = dict(raw)
+            scene['text'] = text
+            scene['id'] = len(scenes) + 1
+            scenes.append(scene)
+
+        return scenes or None
         
 # --- TESTING THE MODULE ---
 if __name__ == "__main__":
