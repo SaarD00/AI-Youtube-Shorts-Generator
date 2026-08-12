@@ -14,7 +14,8 @@ def _get_client():
     return genai.Client(api_key=api_key)
 
 def _get_model():
-    return os.getenv("GEMINI_MODEL", DEFAULT_MODEL)
+    # An unset CI variable arrives as an empty string, not as None.
+    return os.getenv("GEMINI_MODEL") or DEFAULT_MODEL
 
 class ContentBrain:
     def get_trending_topic(self):
