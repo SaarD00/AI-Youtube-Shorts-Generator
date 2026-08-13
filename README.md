@@ -150,12 +150,60 @@ python main.py --voice en-GB-SoniaNeural --output daily_short.mp4
 | `--keep-cache` | Keep intermediate audio/video files instead of cleaning them. |
 | `--fail-fast` | Stop a batch at the first failed run. |
 | `--check` | Run preflight checks (ffmpeg, API keys, avatar) and exit. |
+| `--upload` | Upload each finished video to YouTube (see below). |
+| `--privacy` | `private` (default), `unlisted`, or `public` for uploads. |
 
 Schedule a daily short with cron:
 
 ```cron
 0 9 * * * cd /path/to/AutoShorts-AI && /usr/bin/python3 main.py >> run.log 2>&1
 ```
+
+---
+
+## 📺 Auto-Upload to YouTube
+
+With `--upload`, the pipeline writes the title, description and tags with Gemini
+and publishes the finished short straight to your channel. Uploading needs OAuth,
+not just an API key, so there is a one-time browser step.
+
+### 1. Create OAuth credentials
+
+1. In [Google Cloud Console](https://console.cloud.google.com/), create a project.
+2. Enable **YouTube Data API v3**.
+3. **APIs & Services → Credentials → Create OAuth client ID → Desktop app**.
+4. Copy the client ID and client secret.
+
+### 2. Mint a refresh token (once, on a machine with a browser)
+
+```bash
+python authorize_youtube.py --client-id XXX --client-secret YYY
+```
+
+It opens the Google consent screen and prints three values. Put them in your
+`.env` for local runs, or add them as repository secrets (`YOUTUBE_CLIENT_ID`,
+`YOUTUBE_CLIENT_SECRET`, `YOUTUBE_REFRESH_TOKEN`) for the Actions workflow.
+
+### 3. Run
+
+```bash
+python main.py --upload                      # publishes as private
+python main.py --upload --privacy unlisted
+python main.py --runs 3 --upload             # batch, each one uploaded
+```
+
+### ⚠️ Things that will bite you
+
+- **Uploads default to `private`.** An unverified Google Cloud project has its
+  uploads forced private by YouTube regardless of what you pass, so treat
+  `--privacy public` as taking effect only after your app is verified.
+- **A project in "Testing" mode expires its refresh token after 7 days.** Move
+  the OAuth consent screen from *Testing* to *In production* to get a
+  long-lived token, otherwise the scheduled workflow starts failing weekly.
+- **Quota.** An upload costs 1600 units against a default daily quota of 10,000,
+  so roughly **6 uploads per day** before the API starts refusing.
+- A failed upload never discards the video — the MP4 stays in `assets/final/`
+  and the workflow still publishes it as an artifact.
 
 ---
 

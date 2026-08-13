@@ -135,6 +135,62 @@ class ContentBrain:
         print("❌ Script generation failed after 3 attempts.")
         return None
 
+    def generate_metadata(self, topic, script_data):
+        """
+        Writes the YouTube title, description and tags for a finished short.
+        Falls back to the topic itself if the model misbehaves — a weak title is
+        better than a failed upload.
+        """
+        narration = " ".join(scene['text'] for scene in script_data)
+
+        prompt = f"""
+    Write YouTube Shorts metadata for this video.
+
+    Topic: {topic}
+    Narration: {narration}
+
+    Rules:
+    - "title": under 80 characters, curiosity-driven, no clickbait punctuation spam.
+    - "description": 2-3 sentences summarizing the video, then a blank line, then "#Shorts".
+    - "tags": 8-12 lowercase search keywords, no "#" prefix.
+
+    Return ONLY strict JSON:
+    {{"title": "...", "description": "...", "tags": ["...", "..."]}}
+    """
+
+        fallback = {
+            "title": topic[:80],
+            "description": f"{topic}\n\n#Shorts",
+            "tags": [],
+        }
+
+        try:
+            client = _get_client()
+            response = client.models.generate_content(model=_get_model(), contents=prompt)
+            clean_text = response.text.replace('```json', '').replace('```', '').strip()
+            metadata = json.loads(clean_text)
+        except Exception as e:
+            print(f"   ⚠️ Metadata generation failed ({e}). Using the topic as the title.")
+            return fallback
+
+        if not isinstance(metadata, dict) or not str(metadata.get('title', '')).strip():
+            print("   ⚠️ Metadata had no usable title. Using the topic as the title.")
+            return fallback
+
+        tags = metadata.get('tags') or []
+        if not isinstance(tags, list):
+            tags = []
+
+        description = str(metadata.get('description', '')).strip() or fallback['description']
+        if "#Shorts" not in description:
+            description = f"{description}\n\n#Shorts"
+
+        return {
+            "title": str(metadata['title']).strip(),
+            "description": description,
+            "tags": [str(tag).strip() for tag in tags if str(tag).strip()],
+        }
+
     @staticmethod
     def _sanitize(script_data):
         """
