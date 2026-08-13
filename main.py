@@ -56,12 +56,22 @@ def clean_cache():
     print("✨ Workspace clean!")
 
 
-def preflight():
+def preflight(args=None):
     """
     Verifies everything an unattended run depends on. Returns a list of problems;
     an empty list means the pipeline is safe to start.
     """
     problems = []
+
+    if args is not None and args.upload:
+        try:
+            import modules.publisher  # noqa: F401
+        except ImportError as e:
+            problems.append(f"--upload needs the Google client libraries ({e}). "
+                            "Run: pip install -r requirements.txt")
+        for key in ("YOUTUBE_CLIENT_ID", "YOUTUBE_CLIENT_SECRET", "YOUTUBE_REFRESH_TOKEN"):
+            if not os.getenv(key):
+                problems.append(f"{key} is not set — run authorize_youtube.py once to mint it.")
 
     if not shutil.which("ffmpeg"):
         problems.append("ffmpeg not found on PATH — install it (see README Prerequisites).")
@@ -132,6 +142,25 @@ async def generate_one(args):
     output_name = args.output if (args.output and args.runs == 1) else build_output_name()
     final_path = composer.concatenate_with_transitions(final_scene_paths, output_name)
 
+    # 6. PUBLISH (optional)
+    if final_path and args.upload:
+        metadata = brain.generate_metadata(topic, script)
+        try:
+            # Imported here so the render-only path never needs the Google
+            # client libraries installed.
+            from modules.publisher import YouTubeUploader
+
+            YouTubeUploader().upload(
+                final_path,
+                title=metadata['title'],
+                description=metadata['description'],
+                tags=metadata['tags'],
+                privacy_status=args.privacy,
+            )
+        except Exception as e:
+            # The video rendered fine; a failed upload should not discard it.
+            print(f"❌ Upload Error: {e}")
+
     if final_path and not args.keep_cache:
         clean_cache()
 
@@ -140,7 +169,7 @@ async def generate_one(args):
 
 async def main_async(args):
     if args.check:
-        problems = preflight()
+        problems = preflight(args)
         for problem in problems:
             print(f"❌ {problem}")
         if problems:
@@ -148,7 +177,7 @@ async def main_async(args):
         print("✅ Preflight passed — ready to run.")
         return 0
 
-    problems = preflight()
+    problems = preflight(args)
     if problems:
         for problem in problems:
             print(f"❌ {problem}")
@@ -191,6 +220,9 @@ def parse_args(argv=None):
     parser.add_argument("--keep-cache", action="store_true", help="Keep intermediate audio/video files.")
     parser.add_argument("--fail-fast", action="store_true", help="Stop the batch on the first failed run.")
     parser.add_argument("--check", action="store_true", help="Run preflight checks and exit.")
+    parser.add_argument("--upload", action="store_true", help="Upload each finished video to YouTube.")
+    parser.add_argument("--privacy", choices=("private", "unlisted", "public"), default="private",
+                        help="Privacy status for uploads (default: private).")
 
     args = parser.parse_args(argv)
     if args.runs < 1:

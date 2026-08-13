@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block title %}Sign in — AutoShorts AI{% endblock %}
+{% block body %}
+<h1>🎬 AutoShorts AI</h1>
+<p class="sub">Enter the password to continue.</p>
+
+<form class="card" method="post">
+  <label for="password">Password</label>
+  <input id="password" name="password" type="password" autocomplete="current-password" autofocus required>
+  {% if error %}<div class="err">{{ error }}</div>{% endif %}
+  <button type="submit">Sign in</button>
+</form>
+{% endblock %}

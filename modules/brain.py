@@ -1,11 +1,21 @@
 import os
 import json
+import re
+import time
 from google import genai
 from dotenv import load_dotenv
 
 load_dotenv()
 
 DEFAULT_MODEL = "gemini-3.5-flash"
+
+# Gemini returns these when it is overloaded or rate-limiting rather than when
+# the request itself is wrong, so they are worth waiting out.
+RETRYABLE_STATUSES = (429, 500, 502, 503, 504)
+
+# Longest a single retry will sleep. A daily-quota 429 reports delays far past
+# anything worth blocking a run on.
+MAX_RETRY_WAIT = 90
 
 def _get_client():
     api_key = os.getenv("GEMINI_API_KEY")
@@ -17,6 +27,43 @@ def _get_model():
     # An unset CI variable arrives as an empty string, not as None.
     return os.getenv("GEMINI_MODEL") or DEFAULT_MODEL
 
+def _is_retryable(error):
+    status = getattr(error, "code", None) or getattr(error, "status_code", None)
+    if status in RETRYABLE_STATUSES:
+        return True
+    # Not every client error exposes a numeric code, so fall back to the text.
+    text = str(error)
+    return any(str(code) in text for code in RETRYABLE_STATUSES)
+
+def _retry_delay(error):
+    """
+    Reads the retryDelay Gemini attaches to a 429. Plain backoff is often
+    shorter than what the server actually wants, which just burns the retries.
+    """
+    match = re.search(r"'retryDelay':\s*'(\d+(?:\.\d+)?)s'", str(error))
+    if not match:
+        return None
+    # Cap it: a daily quota reports delays no run should sit and wait out.
+    return min(float(match.group(1)) + 1, MAX_RETRY_WAIT)
+
+def _generate(prompt, retries=4):
+    """
+    Calls Gemini, waiting out the overload and rate-limit responses that a
+    scheduled run hits regularly. Raises once the model is genuinely unreachable.
+    """
+    client = _get_client()
+    model = _get_model()
+
+    for attempt in range(retries):
+        try:
+            return client.models.generate_content(model=model, contents=prompt)
+        except Exception as e:
+            if attempt == retries - 1 or not _is_retryable(e):
+                raise
+            wait = _retry_delay(e) or 2 ** (attempt + 1)
+            print(f"   ⚠️ Gemini unavailable (attempt {attempt+1}/{retries}). Retrying in {wait:.0f}s...")
+            time.sleep(wait)
+
 class ContentBrain:
     def get_trending_topic(self):
         """
@@ -24,8 +71,7 @@ class ContentBrain:
         For now, we ask Gemini to pick a viral niche topic.
         """
         prompts = "Give me 1 specific, viral, and engaging topic for a Short Documentary. It should be a 'Engaging Did you know' fact or a 'Fun/intriguing Engaging News'. return ONLY the topic name."
-        client = _get_client()
-        response = client.models.generate_content(model=_get_model(), contents=prompts)
+        response = _generate(prompts)
         topic = response.text.strip()
         print(f"🎯 Selected Topic: {topic}")
         return topic
@@ -111,11 +157,9 @@ class ContentBrain:
     # """
     
 
-        client = _get_client()
-
         # Unattended runs cannot recover from a single malformed reply, so retry.
         for attempt in range(3):
-            response = client.models.generate_content(model=_get_model(), contents=prompt)
+            response = _generate(prompt)
 
             # Clean the response to ensure it's valid JSON (sometimes AI adds markdown)
             clean_text = response.text.replace('```json', '').replace('```', '').strip()
@@ -134,6 +178,61 @@ class ContentBrain:
 
         print("❌ Script generation failed after 3 attempts.")
         return None
+
+    def generate_metadata(self, topic, script_data):
+        """
+        Writes the YouTube title, description and tags for a finished short.
+        Falls back to the topic itself if the model misbehaves — a weak title is
+        better than a failed upload.
+        """
+        narration = " ".join(scene['text'] for scene in script_data)
+
+        prompt = f"""
+    Write YouTube Shorts metadata for this video.
+
+    Topic: {topic}
+    Narration: {narration}
+
+    Rules:
+    - "title": under 80 characters, curiosity-driven, no clickbait punctuation spam.
+    - "description": 2-3 sentences summarizing the video, then a blank line, then "#Shorts".
+    - "tags": 8-12 lowercase search keywords, no "#" prefix.
+
+    Return ONLY strict JSON:
+    {{"title": "...", "description": "...", "tags": ["...", "..."]}}
+    """
+
+        fallback = {
+            "title": topic[:80],
+            "description": f"{topic}\n\n#Shorts",
+            "tags": [],
+        }
+
+        try:
+            response = _generate(prompt)
+            clean_text = response.text.replace('```json', '').replace('```', '').strip()
+            metadata = json.loads(clean_text)
+        except Exception as e:
+            print(f"   ⚠️ Metadata generation failed ({e}). Using the topic as the title.")
+            return fallback
+
+        if not isinstance(metadata, dict) or not str(metadata.get('title', '')).strip():
+            print("   ⚠️ Metadata had no usable title. Using the topic as the title.")
+            return fallback
+
+        tags = metadata.get('tags') or []
+        if not isinstance(tags, list):
+            tags = []
+
+        description = str(metadata.get('description', '')).strip() or fallback['description']
+        if "#Shorts" not in description:
+            description = f"{description}\n\n#Shorts"
+
+        return {
+            "title": str(metadata['title']).strip(),
+            "description": description,
+            "tags": [str(tag).strip() for tag in tags if str(tag).strip()],
+        }
 
     @staticmethod
     def _sanitize(script_data):

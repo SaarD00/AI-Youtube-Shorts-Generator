@@ -20,6 +20,20 @@ on:
         required: false
         default: "en-US-AvaNeural"
         type: string
+      upload:
+        description: "Upload the result to YouTube"
+        required: false
+        default: false
+        type: boolean
+      privacy:
+        description: "Privacy status for uploads"
+        required: false
+        default: "private"
+        type: choice
+        options:
+          - private
+          - unlisted
+          - public
 
 jobs:
   generate:
@@ -59,10 +73,18 @@ jobs:
           INPUT_TOPIC: ${{ inputs.topic }}
           INPUT_RUNS: ${{ inputs.runs || '1' }}
           INPUT_VOICE: ${{ inputs.voice || 'en-US-AvaNeural' }}
+          INPUT_UPLOAD: ${{ inputs.upload }}
+          INPUT_PRIVACY: ${{ inputs.privacy || 'private' }}
+          YOUTUBE_CLIENT_ID: ${{ secrets.YOUTUBE_CLIENT_ID }}
+          YOUTUBE_CLIENT_SECRET: ${{ secrets.YOUTUBE_CLIENT_SECRET }}
+          YOUTUBE_REFRESH_TOKEN: ${{ secrets.YOUTUBE_REFRESH_TOKEN }}
         run: |
           ARGS=(--runs "$INPUT_RUNS" --voice "$INPUT_VOICE")
           if [ -n "$INPUT_TOPIC" ]; then
             ARGS+=(--topic "$INPUT_TOPIC")
+          fi
+          if [ "$INPUT_UPLOAD" = "true" ]; then
+            ARGS+=(--upload --privacy "$INPUT_PRIVACY")
           fi
           python main.py "${ARGS[@]}"
 
@@ -73,5 +95,7 @@ jobs:
         with:
           name: short-${{ github.run_id }}
           path: assets/final/*.mp4
-          if-no-files-found: error
+          # A failed generate already fails the job; erroring here too would
+          # just bury the real cause under a second, misleading error.
+          if-no-files-found: warn
           retention-days: 14
