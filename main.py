@@ -98,13 +98,17 @@ async def generate_one(args):
     """
     Runs the full pipeline once. Returns the final video path, or None on failure.
     """
+    lang = getattr(args, 'lang', 'pt-BR')
+    default_voice = 'pt-BR-FranciscaNeural' if lang == 'pt-BR' else 'en-US-AvaNeural'
+    voice = args.voice if args.voice != 'en-US-AvaNeural' else default_voice
+
     # 1. BRAIN: Get Script
     brain = ContentBrain()
     try:
         topic = args.topic or brain.get_trending_topic()
         if args.topic:
             print(f"🎯 Using provided topic: {topic}")
-        script = brain.generate_script(topic)
+        script = brain.generate_script(topic, lang=lang)
     except Exception as e:
         print(f"❌ Brain Error: {e}")
         return None
@@ -114,7 +118,7 @@ async def generate_one(args):
         return None
 
     # 2. AUDIO: Generate Voice
-    audio_engine = AudioEngine(voice=args.voice)
+    audio_engine = AudioEngine(voice=voice)
     try:
         script = await audio_engine.process_script(script)
     except Exception as e:
@@ -215,7 +219,8 @@ def parse_args(argv=None):
     )
     parser.add_argument("--topic", help="Skip the AI topic picker and use this topic.")
     parser.add_argument("--runs", type=int, default=1, help="How many videos to generate (default: 1).")
-    parser.add_argument("--voice", default="en-US-AvaNeural", help="edge-tts voice (default: en-US-AvaNeural).")
+    parser.add_argument("--lang", choices=["pt-BR", "en"], default="pt-BR", help="Language for voiceover and script (default: pt-BR).")
+    parser.add_argument("--voice", default="en-US-AvaNeural", help="edge-tts voice.")
     parser.add_argument("--output", help="Output filename for a single run (default: timestamped).")
     parser.add_argument("--keep-cache", action="store_true", help="Keep intermediate audio/video files.")
     parser.add_argument("--fail-fast", action="store_true", help="Stop the batch on the first failed run.")

@@ -76,11 +76,12 @@ class ContentBrain:
         print(f"🎯 Selected Topic: {topic}")
         return topic
 
-    def generate_script(self, topic):
+    def generate_script(self, topic, lang="pt-BR"):
         """
         Generates a structured JSON script with visual cues.
         """
-        print(f"📝 Writing script for: {topic}...")
+        lang_instruction = "Strictly in PORTUGUESE (Brasil)" if lang == "pt-BR" else "Strictly in ENGLISH"
+        print(f"📝 Writing script in {lang} for: {topic}...")
         prompt = f"""
     You are the lead scriptwriter for a high-retention "Edutainment" YouTube Shorts channel.
     Topic: {topic}
@@ -90,13 +91,14 @@ class ContentBrain:
     To keep retention high, we need TWO different stock videos for every single scene.
 
     ### 1. SCRIPT REQUIREMENTS (The Voiceover):
-    - **Perspective:** Strictly **3rd Person** ("Scientists found...", "The ocean hides...").
+    - **Language:** Write the text strictly in {lang_instruction}.
+    - **Perspective:** Strictly **3rd Person** ("Scientists found..." / "Cientistas descobriram...").
     - **Tone:** Engaging, fast-paced, logical. No fluff.
     - **Structure:** 8-9 Scenes total.
     - **Flow:** Hook -> Context -> Mechanism (How it works) -> Twist -> Outro.
 
     ### 2. VISUAL REQUIREMENTS (Dual Visuals):
-    - For EVERY scene, provide TWO distinct search terms:
+    - For EVERY scene, provide TWO distinct search terms in **ENGLISH** (Pexels works best in English):
       - **visual_1:** Matches the *start* of the sentence.
       - **visual_2:** Matches the *end* of the sentence or provides a reaction/context.
     - **Strictly Literal:** If the text is "The economy crashed," do NOT search "sad man". Search "Stock market red chart".

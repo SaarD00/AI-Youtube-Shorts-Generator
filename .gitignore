@@ -22,3 +22,9 @@ __pycache__/
 /assets/avatar/avatar.mp4
 /assets/avatar/Gemini_Generated_Image_ww2ko4ww2ko4ww2k.png
 *.log
+
+# YouTube API credentials (NUNCA commitar!)
+client_secrets.json
+token.pickle
+upload_history.json
+metadata_review.json
