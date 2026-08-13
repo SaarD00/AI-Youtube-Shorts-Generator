@@ -1,5 +1,6 @@
 import os
 import json
+import re
 import time
 from google import genai
 from dotenv import load_dotenv
@@ -11,6 +12,10 @@ DEFAULT_MODEL = "gemini-3.5-flash"
 # Gemini returns these when it is overloaded or rate-limiting rather than when
 # the request itself is wrong, so they are worth waiting out.
 RETRYABLE_STATUSES = (429, 500, 502, 503, 504)
+
+# Longest a single retry will sleep. A daily-quota 429 reports delays far past
+# anything worth blocking a run on.
+MAX_RETRY_WAIT = 90
 
 def _get_client():
     api_key = os.getenv("GEMINI_API_KEY")
@@ -30,6 +35,17 @@ def _is_retryable(error):
     text = str(error)
     return any(str(code) in text for code in RETRYABLE_STATUSES)
 
+def _retry_delay(error):
+    """
+    Reads the retryDelay Gemini attaches to a 429. Plain backoff is often
+    shorter than what the server actually wants, which just burns the retries.
+    """
+    match = re.search(r"'retryDelay':\s*'(\d+(?:\.\d+)?)s'", str(error))
+    if not match:
+        return None
+    # Cap it: a daily quota reports delays no run should sit and wait out.
+    return min(float(match.group(1)) + 1, MAX_RETRY_WAIT)
+
 def _generate(prompt, retries=4):
     """
     Calls Gemini, waiting out the overload and rate-limit responses that a
@@ -44,8 +60,8 @@ def _generate(prompt, retries=4):
         except Exception as e:
             if attempt == retries - 1 or not _is_retryable(e):
                 raise
-            wait = 2 ** (attempt + 1)
-            print(f"   ⚠️ Gemini unavailable (attempt {attempt+1}/{retries}). Retrying in {wait}s...")
+            wait = _retry_delay(e) or 2 ** (attempt + 1)
+            print(f"   ⚠️ Gemini unavailable (attempt {attempt+1}/{retries}). Retrying in {wait:.0f}s...")
             time.sleep(wait)
 
 class ContentBrain:
