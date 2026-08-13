@@ -188,10 +188,45 @@ Then open `http://<your-computer-ip>:8000` on the phone.
 - Set `FLASK_SECRET_KEY` too, otherwise the signing key is regenerated on every
   restart and you get logged out.
 
+### Docker
+
+```bash
+cp .env.example .env      # fill in the keys, APP_PASSWORD and FLASK_SECRET_KEY
+docker compose up -d
+```
+
+The image ships its own ffmpeg and serves the app with gunicorn. A few things
+are deliberate:
+
+- The port is published on `127.0.0.1` only. Put Caddy, nginx, or a Cloudflare
+  Tunnel in front rather than exposing the container directly.
+- **One worker.** The job state that tracks a running render lives in process
+  memory, so a second worker would report "idle" while a render is going.
+- `assets/final` is a volume, so finished videos survive a rebuild, and
+  `assets/avatar` is mounted read-only.
+- Compose refuses to start without `APP_PASSWORD` and `FLASK_SECRET_KEY` set.
+
+Note that a container is not where you want a *scheduled* run — for that use the
+GitHub Actions workflow or cron on the host, both of which call `main.py`
+directly.
+
 To reach it from outside your network, put it behind a tunnel
 (`cloudflared tunnel --url http://localhost:8000`, `ngrok http 8000`) or a
 reverse proxy with HTTPS — with `APP_PASSWORD` set, since the app has no other
 protection.
+
+---
+
+## 🤖 Claude Code on the web
+
+`.claude/hooks/session-start.sh` prepares a remote session automatically:
+installs ffmpeg, installs the Python dependencies, and appends the agent
+proxy's CA to certifi — `edge-tts` pins certifi's bundle directly, so without
+that last step every voiceover fails TLS verification and no audio is produced.
+
+The hook only runs when `CLAUDE_CODE_REMOTE=true`, so local machines are left
+alone. Put `GEMINI_API_KEY` and `PEXELS_API_KEY` in the environment config and a
+session comes up ready to run `python main.py`.
 
 ---
 

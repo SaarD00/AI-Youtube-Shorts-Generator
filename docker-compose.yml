@@ -1,0 +1,25 @@
+services:
+  autoshorts:
+    build: .
+    image: autoshorts-ai
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      # Required when the port is published beyond localhost — webapp.py refuses
+      # to start otherwise, and gunicorn binds 0.0.0.0 here.
+      APP_PASSWORD: ${APP_PASSWORD:?set APP_PASSWORD in .env}
+      FLASK_SECRET_KEY: ${FLASK_SECRET_KEY:?set FLASK_SECRET_KEY in .env}
+    ports:
+      # Bound to loopback: put Caddy or a Cloudflare Tunnel in front rather than
+      # exposing this directly. Change to "8000:8000" only if you mean to.
+      - "127.0.0.1:8000:8000"
+    volumes:
+      # Finished videos survive a rebuild. uid 10001 matches the image's user.
+      - ./assets/final:/app/assets/final
+      - ./assets/avatar:/app/assets/avatar:ro
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/login').status==200 else 1)\""]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
