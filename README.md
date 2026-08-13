@@ -161,6 +161,40 @@ Schedule a daily short with cron:
 
 ---
 
+## 📱 Web Interface
+
+`webapp.py` is a phone-friendly UI over the same pipeline: pick a topic and a
+voice, watch the log live, then play or download the finished MP4 straight to
+your device.
+
+```bash
+pip install -r requirements.txt
+
+# Local only
+python webapp.py
+
+# Reachable from your phone on the same network
+APP_PASSWORD=pick-something python webapp.py --host 0.0.0.0 --port 8000
+```
+
+Then open `http://<your-computer-ip>:8000` on the phone.
+
+- One run at a time — rendering saturates the CPU, so a second concurrent run
+  would only make both slower. Starting one while another is going returns a
+  clear error instead of queueing silently.
+- **`--host` other than `127.0.0.1` requires `APP_PASSWORD`.** The server
+  refuses to start otherwise: anyone who found the URL could spend your Gemini
+  and Pexels quota.
+- Set `FLASK_SECRET_KEY` too, otherwise the signing key is regenerated on every
+  restart and you get logged out.
+
+To reach it from outside your network, put it behind a tunnel
+(`cloudflared tunnel --url http://localhost:8000`, `ngrok http 8000`) or a
+reverse proxy with HTTPS — with `APP_PASSWORD` set, since the app has no other
+protection.
+
+---
+
 ## 📺 Auto-Upload to YouTube
 
 With `--upload`, the pipeline writes the title, description and tags with Gemini
