@@ -95,5 +95,7 @@ jobs:
         with:
           name: short-${{ github.run_id }}
           path: assets/final/*.mp4
-          if-no-files-found: error
+          # A failed generate already fails the job; erroring here too would
+          # just bury the real cause under a second, misleading error.
+          if-no-files-found: warn
           retention-days: 14
