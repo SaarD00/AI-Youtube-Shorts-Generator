@@ -17,7 +17,14 @@ Thumbs.db
 /assets/final
 /assets/temp
 /assets/video_clips
-/modules/__pycache__
+__pycache__/
+*.pyc
 /assets/avatar/avatar.mp4
 /assets/avatar/Gemini_Generated_Image_ww2ko4ww2ko4ww2k.png
 *.log
+
+# YouTube API credentials (NUNCA commitar!)
+client_secrets.json
+token.pickle
+upload_history.json
+metadata_review.json
