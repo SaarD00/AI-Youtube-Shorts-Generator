@@ -1,0 +1,164 @@
+{% extends "base.html" %}
+{% block body %}
+<style>
+  .status { display: flex; align-items: center; gap: 9px; font-size: .9rem; margin-bottom: 12px; }
+  .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--muted); flex: none; }
+  .dot.on { background: var(--ok); animation: pulse 1.4s infinite; }
+  .dot.fail { background: var(--err); }
+  @keyframes pulse { 0%,100% { opacity: 1 } 50% { opacity: .3 } }
+  pre.log {
+    background: #0a0b0f;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 12px;
+    max-height: 300px;
+    overflow: auto;
+    font-size: .78rem;
+    line-height: 1.5;
+    white-space: pre-wrap;
+    word-break: break-word;
+    margin: 0;
+    color: #cbd0dd;
+  }
+  .vid { border-top: 1px solid var(--line); padding: 14px 0; }
+  .vid:first-of-type { border-top: 0; padding-top: 4px; }
+  .vid h3 { margin: 0 0 3px; font-size: .92rem; font-weight: 600; word-break: break-all; }
+  .vid .meta { color: var(--muted); font-size: .78rem; margin-bottom: 9px; }
+  video { width: 100%; max-height: 62vh; border-radius: 10px; background: #000; display: block; }
+  .acts { display: flex; gap: 9px; margin-top: 9px; }
+  .acts a, .acts button {
+    flex: 1; margin: 0; padding: 11px; font-size: .85rem; text-align: center;
+    text-decoration: none; border-radius: 9px; font-weight: 600;
+  }
+  .acts a { background: var(--panel-2); color: var(--text); border: 1px solid var(--line); }
+  .acts button { background: transparent; border: 1px solid var(--line); color: var(--muted); }
+  .empty { color: var(--muted); font-size: .88rem; text-align: center; padding: 22px 0; }
+  .top { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+  .top a { color: var(--muted); font-size: .8rem; text-decoration: none; }
+</style>
+
+<div class="top">
+  <div>
+    <h1>🎬 AutoShorts AI</h1>
+    <p class="sub">Generate a short, then download it to your phone.</p>
+  </div>
+  {% if protected %}<a href="{{ url_for('logout') }}">Sign out</a>{% endif %}
+</div>
+
+<form class="card" id="form">
+  <label for="topic">Topic <span style="text-transform:none">— leave empty to let the AI pick</span></label>
+  <input id="topic" name="topic" placeholder="e.g. Why the Sahara was once green" autocomplete="off">
+
+  <label for="voice">Voice</label>
+  <select id="voice" name="voice">
+    {% for value, label in voices %}<option value="{{ value }}">{{ label }}</option>{% endfor %}
+  </select>
+
+  <label for="runs">How many videos</label>
+  <input id="runs" name="runs" type="number" min="1" max="10" value="1" inputmode="numeric">
+
+  <button type="submit" id="go">Generate</button>
+  <div class="err" id="formError" hidden></div>
+</form>
+
+<div class="card">
+  <div class="status">
+    <span class="dot" id="dot"></span>
+    <span id="statusText">Idle</span>
+  </div>
+  <pre class="log" id="log">No run yet.</pre>
+  <button class="ghost" id="stop" hidden>Stop run</button>
+</div>
+
+<div class="card">
+  <h2 style="font-size:.95rem;margin:0 0 10px">Videos</h2>
+  <div id="videos"></div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+let autoScroll = true;
+
+$('log').addEventListener('scroll', () => {
+  const el = $('log');
+  autoScroll = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
+});
+
+function renderVideos(videos) {
+  if (!videos.length) {
+    $('videos').innerHTML = '<div class="empty">Nothing generated yet.</div>';
+    return;
+  }
+  $('videos').innerHTML = videos.map(v => `
+    <div class="vid">
+      <h3>${v.name}</h3>
+      <div class="meta">${v.created} · ${v.size_mb} MB</div>
+      <video controls preload="none" playsinline src="/videos/${encodeURIComponent(v.name)}"></video>
+      <div class="acts">
+        <a href="/download/${encodeURIComponent(v.name)}">Download</a>
+        <button onclick="del('${v.name.replace(/'/g, "\\'")}')">Delete</button>
+      </div>
+    </div>`).join('');
+}
+
+async function del(name) {
+  if (!confirm('Delete ' + name + '?')) return;
+  await fetch('/delete/' + encodeURIComponent(name), { method: 'POST' });
+  poll();
+}
+
+async function poll() {
+  let data;
+  try {
+    data = await (await fetch('/api/status')).json();
+  } catch (e) {
+    return; // transient; the next tick retries
+  }
+
+  const running = data.running;
+  $('dot').className = 'dot' + (running ? ' on' : (data.returncode ? ' fail' : ''));
+  $('go').disabled = running;
+  $('go').textContent = running ? 'Running…' : 'Generate';
+  $('stop').hidden = !running;
+
+  if (running) {
+    $('statusText').textContent = `Running — ${data.command || ''} (since ${data.started_at})`;
+  } else if (data.returncode === 0) {
+    $('statusText').textContent = 'Finished';
+  } else if (data.returncode !== null) {
+    $('statusText').textContent = `Failed (exit ${data.returncode})`;
+  } else {
+    $('statusText').textContent = 'Idle';
+  }
+
+  if (data.lines.length) {
+    $('log').textContent = data.lines.join('\n');
+    if (autoScroll) $('log').scrollTop = $('log').scrollHeight;
+  }
+
+  renderVideos(data.videos);
+}
+
+$('form').addEventListener('submit', async e => {
+  e.preventDefault();
+  $('formError').hidden = true;
+  $('go').disabled = true;
+  const res = await fetch('/generate', { method: 'POST', body: new FormData($('form')) });
+  const body = await res.json();
+  if (!body.ok) {
+    $('formError').textContent = body.error || 'Could not start.';
+    $('formError').hidden = false;
+    $('go').disabled = false;
+  }
+  poll();
+});
+
+$('stop').addEventListener('click', async () => {
+  await fetch('/stop', { method: 'POST' });
+  poll();
+});
+
+poll();
+setInterval(poll, 2000);
+</script>
+{% endblock %}

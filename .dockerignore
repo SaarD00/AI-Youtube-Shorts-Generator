@@ -1,0 +1,10 @@
+.git
+.github
+__pycache__/
+*.pyc
+.env
+assets/final/*
+assets/temp/*
+assets/audio_clips/*
+assets/video_clips/*
+*.log

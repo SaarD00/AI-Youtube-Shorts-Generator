@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<title>{% block title %}AutoShorts AI{% endblock %}</title>
+<style>
+  :root {
+    --bg: #0e0f13;
+    --panel: #171922;
+    --panel-2: #1e212c;
+    --line: #2a2e3c;
+    --text: #e8eaf0;
+    --muted: #969cae;
+    --accent: #f2622e;
+    --ok: #3ecf8e;
+    --err: #ff6b6b;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 16px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    padding: env(safe-area-inset-top) 0 env(safe-area-inset-bottom);
+  }
+  .wrap { max-width: 720px; margin: 0 auto; padding: 20px 16px 64px; }
+  h1 { font-size: 1.35rem; margin: 0 0 4px; }
+  .sub { color: var(--muted); font-size: .85rem; margin-bottom: 22px; }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 16px;
+    margin-bottom: 16px;
+  }
+  label { display: block; font-size: .8rem; color: var(--muted); margin: 12px 0 6px; text-transform: uppercase; letter-spacing: .04em; }
+  input, select, textarea {
+    width: 100%;
+    background: var(--panel-2);
+    border: 1px solid var(--line);
+    color: var(--text);
+    border-radius: 10px;
+    padding: 13px 12px;
+    font-size: 16px; /* keeps iOS/Android from zooming on focus */
+    font-family: inherit;
+  }
+  input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+  button {
+    width: 100%;
+    border: 0;
+    border-radius: 10px;
+    padding: 15px;
+    font-size: 1rem;
+    font-weight: 600;
+    font-family: inherit;
+    background: var(--accent);
+    color: #fff;
+    margin-top: 18px;
+    cursor: pointer;
+  }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+  button.ghost { background: transparent; border: 1px solid var(--line); color: var(--muted); margin-top: 10px; }
+  .row { display: flex; gap: 12px; }
+  .row > * { flex: 1; }
+  .err { color: var(--err); font-size: .9rem; margin-top: 10px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+{% block body %}{% endblock %}
+</div>
+</body>
+</html>

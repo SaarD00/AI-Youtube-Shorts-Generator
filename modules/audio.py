@@ -40,7 +40,12 @@ class AudioEngine:
 
     async def process_script(self, script_data):
         print(f"🎙️ Starting Audio Generation for {len(script_data)} scenes...")
-        
+
+        # Only scenes that actually got audio are kept: the composer reads
+        # 'audio_path'/'duration' unconditionally and would crash on a scene
+        # that was skipped here.
+        narrated = []
+
         for scene in script_data:
             scene_id = scene['id']
             text = scene['text']
@@ -52,13 +57,17 @@ class AudioEngine:
                 
                 # Get Duration
                 duration = self.get_audio_duration(file_path)
-                
+                if duration <= 0:
+                    print(f"   ❌ Skipping Scene {scene_id}: unreadable audio duration.")
+                    continue
+
                 # Update Scene Data
                 scene['audio_path'] = file_path
                 scene['duration'] = duration
-                
+                narrated.append(scene)
+
                 print(f"   ✅ Scene {scene_id}: {duration:.2f}s generated.")
-                
+
                 # CRITICAL: Sleep for 1 second to be polite to the API
                 # This prevents the "Connection Timeout" error
                 await asyncio.sleep(1) 
@@ -66,5 +75,8 @@ class AudioEngine:
             except Exception as e:
                 print(f"   ❌ Skipping Scene {scene_id} due to audio error.")
                 continue
-            
-        return script_data
+
+        if len(narrated) < len(script_data):
+            print(f"   ⚠️ {len(script_data) - len(narrated)} scene(s) dropped without audio.")
+
+        return narrated

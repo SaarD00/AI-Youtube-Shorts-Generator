@@ -63,11 +63,15 @@ class Composer:
                 duration_a = total_duration / 2
                 duration_b = (total_duration / 2) + 0.5 
 
+                # force_original_aspect_ratio='increase' fills the 9:16 frame and
+                # lets the crop trim the overflow; a bare scale would squash any
+                # clip Pexels returns in a different aspect ratio.
                 stream_a = (
                     ffmpeg.input(path_a, stream_loop=-1)
                     .trim(duration=duration_a)
                     .setpts('PTS-STARTPTS')
-                    .filter('scale', 1080, 1920).filter('crop', 1080, 1920)
+                    .filter('scale', 1080, 1920, force_original_aspect_ratio='increase')
+                    .filter('crop', 1080, 1920)
                     .filter('fps', fps=30, round='up')
                 )
 
@@ -75,7 +79,8 @@ class Composer:
                     ffmpeg.input(path_b, stream_loop=-1)
                     .trim(duration=duration_b)
                     .setpts('PTS-STARTPTS')
-                    .filter('scale', 1080, 1920).filter('crop', 1080, 1920)
+                    .filter('scale', 1080, 1920, force_original_aspect_ratio='increase')
+                    .filter('crop', 1080, 1920)
                     .filter('fps', fps=30, round='up')
                 )
 
@@ -124,7 +129,7 @@ class Composer:
 
         # 2. Render Loop
         for i, scene in enumerate(script_data):
-            current_pair = video_pairs[i]
+            current_pair = video_pairs[i] if i < len(video_pairs) else None
             is_avatar = False
 
             # Injection Logic: Check if current index is in our chosen list
